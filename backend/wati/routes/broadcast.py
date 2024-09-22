@@ -45,6 +45,12 @@ async def verify_webhook(request: Request):
 # Webhook event listener to receive message status updates
 
 
+
+@router.get("/health")
+async def health_check():
+    return JSONResponse(content={"status": "healthy"}, status_code=200)
+
+
 @router.post("/meta-webhook")
 async def receive_meta_webhook(request: Request, db: Session = Depends(database.get_db)):
     try:
