@@ -30,6 +30,11 @@ router=APIRouter( tags=['Broadcast'])
 WEBHOOK_VERIFY_TOKEN = "12345"  # Replace with your verification token
 
 # Meta Webhook verification endpoint
+
+@router.get("/health")
+async def health_check():
+    return JSONResponse(content={"status": "healthy"}, status_code=200)
+
 @router.get("/meta-webhook")
 async def verify_webhook(request: Request):
     verify_token = request.query_params.get("hub.verify_token")
