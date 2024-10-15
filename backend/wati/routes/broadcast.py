@@ -1,8 +1,11 @@
 from fastapi import APIRouter,Depends,HTTPException, File, UploadFile,Request
-from ..models import Broadcast,Contacts
-from ..Schemas import broadcast,user
+from fastapi import FastAPI
+from ..models import Broadcast,Contacts,ChatBox,User
+from ..models.User import User
+from ..models.ChatBox import Last_Conversation
+from ..models.ChatBox import Conversation
+from ..Schemas import broadcast,user,chatbox
 from ..database import database
-from sqlalchemy.orm import Session
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 import requests
@@ -10,9 +13,11 @@ import json
 from fastapi.responses import JSONResponse
 import csv
 import io
+import pytz
 from ..oauth2 import get_current_user
 from dramatiq import get_broker
 import asyncio
+from datetime import datetime,timedelta
 
 from ..crud.template import send_template_to_whatsapp
 
@@ -21,20 +26,44 @@ from starlette.responses import PlainTextResponse
 from ..oauth2 import get_current_user
 from ..crud.template import send_template_to_whatsapp# Replace with your actual WhatsApp Business API endpoint and token
 import logging
+from apscheduler.schedulers.background import BackgroundScheduler
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy.orm import Session
+from fastapi.responses import StreamingResponse
+import asyncio
+from typing import Generator
+import time
+from fastapi import APIRouter, Request, BackgroundTasks
+
+from sqlalchemy.orm import Session
+from typing import Generator
+from datetime import datetime, timezone
+import json
+import time
+from fastapi import APIRouter, Request, BackgroundTasks
+from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
+from typing import Generator
+from fastapi import APIRouter, Depends,Query
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from fastapi.responses import StreamingResponse
+from typing import AsyncGenerator
+import asyncio
+import json
+from sqlalchemy import cast,String
+from fastapi import status
 
 # Replace with your actual WhatsApp Business API endpoint and token
 
 
 router=APIRouter( tags=['Broadcast'])
+app = FastAPI()
 
 WEBHOOK_VERIFY_TOKEN = "12345"  # Replace with your verification token
 
 # Meta Webhook verification endpoint
-
-@router.get("/health")
-async def health_check():
-    return JSONResponse(content={"status": "healthy"}, status_code=200)
-
 @router.get("/meta-webhook")
 async def verify_webhook(request: Request):
     verify_token = request.query_params.get("hub.verify_token")
@@ -46,18 +75,18 @@ async def verify_webhook(request: Request):
     
     else:
         raise HTTPException(status_code=403, detail="Verification token mismatch")
-    
-# Webhook event listener to receive message status updates
 
+# ######### WORKING ENDPOINT WITH BROADCAST REPORT ##########
+
+# POST endpoint to handle webhook data from WhatsApp
 
 @router.post("/meta-webhook")
 async def receive_meta_webhook(request: Request, db: Session = Depends(database.get_db)):
     try:
         # Parse the incoming webhook request
         body = await request.json()
-        print(body)
+        print(json.dumps(body, indent=4))  # For readability of the incoming payload
 
-        # Ensure 'entry' exists in the body
         if "entry" not in body:
             raise HTTPException(status_code=400, detail="Invalid webhook format")
 
@@ -65,7 +94,7 @@ async def receive_meta_webhook(request: Request, db: Session = Depends(database.
         for event in body["entry"]:
             if "changes" not in event:
                 raise HTTPException(status_code=400, detail="Missing 'changes' key in entry")
-            
+
             # Iterate through each change
             for change in event["changes"]:
                 if "value" not in change:
@@ -129,37 +158,37 @@ async def receive_meta_webhook(request: Request, db: Session = Depends(database.
                         db.commit()
                         db.refresh(broadcast_report) 
                 
-                elif "messages" in value:
+                if "messages" in value:
+                    
                     for message in value["messages"]:
-
-                        message_reply=True
-                        message_status='replied'
-                         
-                        wamid=message['context']['id']
-                        broadcast_report = (
-                                db.query(Broadcast.BroadcastAnalysis)
-                                .filter( Broadcast.BroadcastAnalysis.message_id==wamid)
-                                .first()
-                            )
+                        if message.get('context', {}).get('id'):
+                            message_reply=True
+                            message_status='replied'
                         
-                        if not broadcast_report:
-                                raise HTTPException(status_code=404,detail="Broadcast not found")
+                            
+                            wamid=message['context']['id']
+                            broadcast_report = (
+                                    db.query(Broadcast.BroadcastAnalysis)
+                                    .filter( Broadcast.BroadcastAnalysis.message_id==wamid)
+                                    .first()
+                                )
+                            
+                            if not broadcast_report:
+                                    raise HTTPException(status_code=404,detail="Broadcast not found")
 
-                        if wamid:
-                                broadcast_report.replied=message_sent=message_reply
-                                broadcast_report.status=message_status
+                            if wamid:
+                                    broadcast_report.replied=message_sent=message_reply
+                                    broadcast_report.status=message_status
 
-                        db.add(broadcast_report)
-                        db.commit()
-                        db.refresh(broadcast_report) 
+                            db.add(broadcast_report)
+                            db.commit()
+                            db.refresh(broadcast_report)
+                # Handle incoming messages and replies
+                if "messages" in value:
+                    await handle_incoming_messages(value, db)
 
-                         
-                         
 
-      
-
-                       
-        return {"status": "ok"}
+        return {"message": "Webhook data received and processed successfully"}
 
     except KeyError as e:
         logging.error(f"Missing key in webhook payload: {str(e)}")
@@ -169,138 +198,215 @@ async def receive_meta_webhook(request: Request, db: Session = Depends(database.
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
+async def handle_incoming_messages(value:dict, db: Session):
+# Handle incoming messages
+    name = value['contacts'][0]['profile']['name']
 
 
-# Broadcast 2 routes
+    for message in value["messages"]:
+        wa_id = message['from']
+        phone_number_id = value['metadata']['phone_number_id']
+        message_id = message['id']
+        message_content = message['text']['body']
+        timestamp = int(message['timestamp'])
+        message_type = message['type']
+        context_message_id = message.get('context', {}).get('id')
 
-# test
+        
+        utc_time = datetime.utcfromtimestamp(timestamp)
 
-# @router.post("/send-template-message/")
-# async def send_template_message(
-#     request: broadcast.input_broadcast, 
-#     get_current_user: user.newuser = Depends(get_current_user), 
-#     db: Session = Depends(database.get_db)
-# ):
-#     print(request)
 
-#     # Save broadcast details
-#     broadcastList = Broadcast.BroadcastList(
-#         user_id=get_current_user.id,
-#         name=request.name,
-#         template=request.template,
-#         contacts=request.recipients,
-#         type=request.type,
-#         success=0,
-#         failed=0,
-#         status="processing..."
-#     )
-#     db.add(broadcastList)
-#     db.commit()
-#     db.refresh(broadcastList)
+        
+        last_conversation = db.query(Last_Conversation).filter(
+            Last_Conversation.sender_wa_id == wa_id,
+            Last_Conversation.receiver_wa_id == phone_number_id,
+            
+        ).first()
+
+        # Determine if this is the first message in a new conversation
+
+        if last_conversation:
+            # Clear previous expired conversations for this pair
+            db.query(Last_Conversation).filter(
+                Last_Conversation.sender_wa_id == wa_id,
+                Last_Conversation.receiver_wa_id == phone_number_id
+            ).delete()
+            db.commit()
+
+
+        last_Conversation = Last_Conversation(
+                business_account_id=value['metadata'].get('business_account_id', 'unknown'),
+                message_id=message_id,
+                message_content=message_content,
+                sender_wa_id=wa_id,
+                sender_name=name,
+                receiver_wa_id=phone_number_id,
+                last_chat_time=utc_time,
+                active=True
+            )
+        db.add(last_Conversation)
+        db.commit()
+
+        # Store the message in the Conversations table
+        conversation = Conversation(
+            wa_id=wa_id,
+            message_id=message_id,
+            phone_number_id=phone_number_id,
+            message_content=message_content,
+            timestamp=utc_time,
+            context_message_id=context_message_id,
+            message_type=message_type,
+            direction="Receive"
+        )
+        db.add(conversation)
+        db.commit()
+
+
+
+
+
+
+
+@router.get("/sse/conversations/{contact_number}")
+async def event_stream(contact_number: str, request: Request, background_tasks: BackgroundTasks, db: Session = Depends(database.get_db)):
+    def get_conversations() -> Generator[str, None,None]:
+        last_data = None  # Track last conversation data
+
+        while True:
+            # Fetch the conversations for the given contact number
+            conversations = db.query(ChatBox.Conversation).filter(ChatBox.Conversation.wa_id == contact_number).order_by(ChatBox.Conversation.timestamp).all()
+
+            # Convert conversation instances to dictionaries
+            conversation_data = [convert_to_dict(conversation) for conversation in conversations]
+
+            # Send data only if there is a change
+            if conversation_data != last_data:
+                yield f"data: {json.dumps(conversation_data)}\n\n"
+                last_data = conversation_data  # Update last known data
+
+            # Check if the request has been aborted using a blocking call
+            # if request.is_disconnected():
+            #     break
+
+            # Wait for a second before checking again
+            time.sleep(1)
+
+    return StreamingResponse(get_conversations(), media_type="text/event-stream")
+
+def convert_to_dict(instance):
+    """Convert SQLAlchemy model instance to a dictionary."""
+    if instance is None:
+        return None
     
-#     saved_broadcast_id = broadcastList.id
+    instance_dict = {}
+    for key, value in instance.__dict__.items():
+        if not key.startswith('_'):
+            # Check if the value is a datetime instance
+            if isinstance(value, datetime):
+                instance_dict[key] = value.isoformat()  # Convert to string
+            else:
+                instance_dict[key] = value
+    
+    return instance_dict
+# Assuming `ChatBox`, `database`, and `convert_to_dict` are defined elsewhere
 
 
-#     # Prepare API URL and headers
-#     API_url = f"https://graph.facebook.com/v20.0/{get_current_user.Phone_id}/messages"
-#     headers = {
-#         "Authorization": f"Bearer {get_current_user.PAccessToken}",
-#         "Content-Type": "application/json"
-#     }
 
-#     success_count = 0
-#     errors = []
-#     failed_count = 0
 
-#     for recipient in request.recipients:
-#         # Create the base payload
-#         data = {
-#             "messaging_product": "whatsapp",
-#             "to": recipient,
-#             "type": "template",
-#             "template": {
-#                 "name": request.template,
-#                 "language": {"code": "en_US"}
-#             }
-#         }
+@router.get("/active-conversations")
+def get_active_conversations(
+    token: str = Query(...),
+    db: Session = Depends(database.get_db),  # Use Session for sync DB operations
+) -> StreamingResponse:
 
-#         # Check if the image URL is provided and add it to the payload
-#         if request.image_id:
-#             data["template"]["components"] = [
-#                 {
-#                     "type": "header",
-#                     "parameters": [
-#                         {
-#                             "type": "image",
-#                             "image": {
-#                                         "id": request.image_id
-#                         }
-#                         }
-#                     ]
-#                 }
-#             ]
+    # Authenticate the user using the token
+    current_user = get_current_user(token, db)
+    if not get_current_user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
+    
+    def get_active_chats() -> Generator[str, None, None]:
+        last_active_chats = None  # Variable to hold the last known state of active chats
+        
+        while True:
+            # Synchronously query the database for active chats
+            active_chats = (
+                db.query(ChatBox.Last_Conversation)
+                .filter(cast(ChatBox.Last_Conversation.receiver_wa_id, String) == str(current_user.Phone_id))
+                .all()
+            )
+            
+            # Convert the result into a list of dictionaries
+            active_chat_data = [convert_to_dict(chat) for chat in active_chats]
 
-#         # Check if body parameters are provided and add them to the payload
-#         # if request.body_parameters:
-#         #     body_params = [{"type": "text", "text": param} for param in request.body_parameters]
-#         #     if "components" not in data["template"]:
-#         #         data["template"]["components"] = []
-#         #     data["template"]["components"].append({
-#         #         "type": "body",
-#         #         "parameters": body_params
-#         #     })
+            # Check if the current active chats are different from the last known state
+            if active_chat_data != last_active_chats:
+                # Update the last known state
+                last_active_chats = active_chat_data
+                # Yield the updated active chats as a JSON string
+                yield f"data: {json.dumps(active_chat_data)}\n\n"
 
-#         # Send the request to the WhatsApp API
-#         response = requests.post(API_url, headers=headers, data=json.dumps(data))
-#         response_data = response.json()
+            # Sleep for a while before the next check
+            time.sleep(1)
 
-#         if response.status_code == 200:
-#             success_count += 1
-#             wamid = response_data['messages'][0]['id']
-#             phone_num = response_data['contacts'][0]["wa_id"]
+    return StreamingResponse(get_active_chats(), media_type="text/event-stream")
 
-#             MessageIdLog = Broadcast.BroadcastAnalysis(
-#                 user_id=get_current_user.id,
-#                 broadcast_id=saved_broadcast_id,
-#                 message_id=wamid,
-#                 status="sent",
-#                 phone_no=phone_num,
-#             )
-#             db.add(MessageIdLog)
-#             db.commit()
-#             db.refresh(MessageIdLog)
-#         else:
-#             failed_count += 1
-#             errors.append({"recipient": recipient, "error": response_data})
+@router.post("/send-text-message/")
+def send_message(payload: chatbox.MessagePayload,db: Session = Depends(database.get_db),get_current_user: user.newuser = Depends(get_current_user)):
+    # Construct the URL for sending the message
+    whatsapp_url = f"https://graph.facebook.com/v20.0/{get_current_user.Phone_id}/messages"
 
-#             MessageIdLog = Broadcast.BroadcastAnalysis(
-#                 user_id=get_current_user.id,
-#                 broadcast_id=saved_broadcast_id,
-#                 status="failed",
-#                 phone_no=recipient,
-#             )
-#             db.add(MessageIdLog)
-#             db.commit()
-#             db.refresh(MessageIdLog)
+    # Set up headers with the access token provided by the frontend
+    headers = {
+        "Authorization": f"Bearer {get_current_user.PAccessToken}",
+        "Content-Type": "application/json"
+    }
 
-#     # Update broadcast status
-#     broadcast = db.query(Broadcast.BroadcastList).filter(Broadcast.BroadcastList.id == saved_broadcast_id).first()
-#     if not broadcast:
-#         raise HTTPException(status_code=404, detail="Broadcast not found")
+    # Construct the message payload to be sent to the WhatsApp Business API
+    data = {
+        "messaging_product": "whatsapp",
+        "to": payload.wa_id,
+        "type": "text",
+        "text": {
+            "body": payload.body
+        }
+    }
 
-#     if saved_broadcast_id:
-#         broadcast.success = success_count
-#         broadcast.status = "Successful" if failed_count == 0 else "Partially Successful"
-#         broadcast.failed = failed_count
-#     db.add(broadcast)
-#     db.commit()
-#     db.refresh(broadcast)
+    # Send POST request to WhatsApp API
+    response = requests.post(whatsapp_url, headers=headers, json=data)
 
-#     return {
-#         "status": "completed",
-#         "successful_messages": success_count,
-#         "errors": errors
-#     }
+    # Check for errors in the response
+    if response.status_code != 200:
+        print(response.json())
+        raise HTTPException(status_code=response.status_code, detail=response.json())
+
+        # return {"status": "Message sent", "response": response.json()}
+    # Parse the response JSON to get message details
+    response_data = response.json()
+    
+
+    try:
+        # Save the sent message data in conversations table
+        conversation = Conversation(
+        wa_id=payload.wa_id,
+        message_id=response_data.get("messages")[0].get("id"),
+        phone_number_id=get_current_user.Phone_id,
+        message_content=payload.body,
+        timestamp=datetime.utcnow(),
+        context_message_id=None,  # Set based on your needs
+        message_type="text",
+        direction="sent"  # Set direction to "sent"
+        )
+    
+        db.add(conversation)
+        db.commit()
+        db.refresh(conversation)
+        
+        return {"status": "Message sent", "response": response_data}
+    
+    except Exception as e:
+        db.rollback()  # Rollback in case of any error
+        print(f"Error storing message in conversation table: {e}")
+        raise HTTPException(status_code=500, detail="Error storing message in database")
 
 
 @router.post("/send-template-message/")
@@ -309,6 +415,7 @@ async def send_template_message(
     get_current_user: user.newuser = Depends(get_current_user),
     db: Session = Depends(database.get_db)
 ):
+
     # Save broadcast details
     broadcastList = Broadcast.BroadcastList(
         user_id=get_current_user.id,
@@ -339,7 +446,7 @@ async def send_template_message(
     for contact in request.recipients:
         recipient_name = contact.name
         recipient_phone = contact.phone
-
+        print(recipient_name)
         data = {
             "messaging_product": "whatsapp",
             "to": recipient_phone,
@@ -401,6 +508,24 @@ async def send_template_message(
             db.add(MessageIdLog)
             db.commit()
             db.refresh(MessageIdLog)
+
+
+            # Save the sent message data in conversations table
+            conversation = Conversation(
+            wa_id=recipient_phone,
+            message_id=response_data.get("messages")[0].get("id"),
+            phone_number_id=get_current_user.Phone_id,
+            message_content=f"#template_message# {request.template}",
+            timestamp=datetime.utcnow(),
+            context_message_id=None,  # Set based on your needs
+            message_type="text",
+            direction="sent"  # Set direction to "sent"
+            )
+        
+            db.add(conversation)
+            db.commit()
+            db.refresh(conversation)
+
         else:
             failed_count += 1
             errors.append({"recipient": recipient_phone, "error": response_data})
@@ -433,8 +558,6 @@ async def send_template_message(
         "successful_messages": success_count,
         "errors": errors
     }
-
-
 
 
 

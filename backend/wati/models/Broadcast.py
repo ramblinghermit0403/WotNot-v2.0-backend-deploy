@@ -12,14 +12,15 @@ class BroadcastList(database.Base):
     name = Column(String)
     type = Column(String, nullable=True)
     template = Column(String)
-    contacts = Column(JSON, nullable=False)
+    contacts = Column(ARRAY(String))
+    # contacts = Column(JSON, nullable=False)
     success = Column(Integer)
     failed = Column(Integer)
     status = Column(String)
-    scheduled_time = Column(TIMESTAMP(timezone=True), nullable=True)  # Allows NULL for immediate broadcasts
+    scheduled_time = Column(TIMESTAMP, nullable=True)  # Allows NULL for immediate broadcasts
     task_id = Column(String, nullable=True)  # Stores the task ID for scheduled broadcasts
-    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
-    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(TIMESTAMP, server_default=func.now())
+    updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
     
 
 class BroadcastAnalysis(database.Base):

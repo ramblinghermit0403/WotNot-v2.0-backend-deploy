@@ -18,8 +18,6 @@ class input(BaseModel):
     body_parameters: str = None
 
 
-
-
 class input_broadcast(BaseModel):
     recipients: List[Contact]
     template:str
@@ -29,21 +27,6 @@ class input_broadcast(BaseModel):
     image_id:Optional[str] = None 
     body_parameters: str = None
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "name": "New Year Campaign",
-                "template": "new_year_template",
-                "type": "Broadcast",
-                "recipients": [
-                    {"name": "John Doe", "phone": "+1234567890"},
-                    {"name": "Jane Smith", "phone": "+0987654321"}
-                ],
-                "image_id": "123456789",
-                "body_parameters": ["param1", "param2"]
-            }
-        }
-    
 
 class BroadcastListCreate(BaseModel): 
     name:str

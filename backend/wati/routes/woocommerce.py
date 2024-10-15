@@ -175,7 +175,7 @@ async def handle_woocommerce_webhook(request: Request, db: Session = Depends(dat
 def apikey(request:Request,get_current_user: user.newuser=Depends(get_current_user)):
     apikey=get_current_user.api_key
 
-    base_url = "http://13.61.34.23"
+    base_url = request.url.scheme + "://" + request.url.netloc
 
     webhooklink=f"{base_url}/webhook/woocommerce?api_key={apikey}"
 
