@@ -11,7 +11,7 @@ from fastapi import HTTPException
 
 
 # SQLAlchemy Database Configuration
-SQLALCHEMY_DATABASE_URL = 'postgresql://postgres:Denmarks123$@localhost/wati_clone'
+SQLALCHEMY_DATABASE_URL = 'postgresql://postgres:Naveen1971$@my-db-instance.cj4628i6epn6.eu-north-1.rds.amazonaws.com/wotnot'
 # SQLALCHEMY_DATABASE_URL = 'postgresql://postgres:Denmarks123$@localhost/wati_clone'
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
