@@ -20,9 +20,13 @@ from dramatiq.middleware import AgeLimit, TimeLimit, Retries
 from dramatiq.middleware import AsyncIO
 import asyncio
 # SQLAlchemy Database Configuration
-SQLALCHEMY_DATABASE_URL = 'postgresql+asyncpg://postgres:Naveen1971$@my-db-instance.cj4628i6epn6.eu-north-1.rds.amazonaws.com/wotnot'
+SQLALCHEMY_DATABASE_URL = 'postgresql+asyncpg://postgres:Denmarks123$@localhost/wati_clone'
 
 engine = create_async_engine(SQLALCHEMY_DATABASE_URL, echo=True)
+
+
+
+
 
 AsyncSessionLocal = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
 
@@ -46,28 +50,72 @@ async def get_task_status(task_id: int, db: AsyncSession):
         return broadcast.status
     
     return "unknown"
+from dramatiq.middleware import Middleware
+from dramatiq.middleware import SkipMessage
+import asyncio
 
-# Middleware to handle task cancellations
 class CancelationMiddleware(Middleware):
+    def __init__(self, db_session_factory):
+        """
+        Initialize the middleware with a database session factory.
+        
+        Args:
+            db_session_factory: A callable that provides a database session (e.g., get_db).
+        """
+        self.db_session_factory = db_session_factory
+
     def before_process_message(self, broker, message):
-        asyncio.run(self._async_before_process_message(broker, message))
+        """
+        Middleware hook to run before processing a message.
 
-    async def _async_before_process_message(self, broker, message):
-        # Create a new database session using async context management
-        async for db in get_db():
-                task_id = message.message_id
-                status = await get_task_status(task_id, db)  # Await the async function
-                if status == 'Cancelled':
-                    raise SkipMessage("Task has been cancelled.")
+        Args:
+            broker: The broker instance.
+            message: The message being processed.
+        """
+        loop = self._get_or_create_event_loop()
+        task_status = loop.run_until_complete(self._check_task_status(message.message_id))
+        
+        if task_status == "Cancelled":
+            raise SkipMessage("Task has been cancelled.")
 
-                # Ensure the session is closed after use
+    async def _check_task_status(self, task_id):
+        """
+        Check the status of a task from the database asynchronously.
+
+        Args:
+            task_id: The ID of the task to check.
+
+        Returns:
+            str: The status of the task.
+        """
+        async for db in self.db_session_factory():
+            return await get_task_status(task_id, db)
+
+    @staticmethod
+    def _get_or_create_event_loop():
+        """
+        Get the current event loop, or create a new one if none exists in the current thread.
+        
+        Returns:
+            asyncio.AbstractEventLoop: The event loop for the current thread.
+        """
+        try:
+            return asyncio.get_event_loop()
+        except RuntimeError:  # No event loop in this thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            return loop
+
+
+cancelation_middleware = CancelationMiddleware(get_db)
 
 # Add the middleware to your Dramatiq broker
 from dramatiq.brokers.redis import RedisBroker
 
 redis_broker = RedisBroker(url="redis://localhost:6379")
-# redis_broker.add_middleware(CancelationMiddleware())
+
 redis_broker.add_middleware(AsyncIO()) 
+redis_broker.add_middleware(cancelation_middleware)
 dramatiq.set_broker(redis_broker)
 
 
