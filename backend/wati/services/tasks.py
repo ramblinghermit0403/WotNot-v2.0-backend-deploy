@@ -20,13 +20,9 @@ from dramatiq.middleware import AgeLimit, TimeLimit, Retries
 from dramatiq.middleware import AsyncIO
 import asyncio
 # SQLAlchemy Database Configuration
-SQLALCHEMY_DATABASE_URL = 'postgresql+asyncpg://postgres:Denmarks123$@localhost/wati_clone'
+SQLALCHEMY_DATABASE_URL = 'postgresql+asyncpg://postgres:Naveen1971$@my-db-instance.cj4628i6epn6.eu-north-1.rds.amazonaws.com/wotnot'
 
 engine = create_async_engine(SQLALCHEMY_DATABASE_URL, echo=True)
-
-
-
-
 
 AsyncSessionLocal = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
 
