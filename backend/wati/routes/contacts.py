@@ -244,7 +244,7 @@ async def create_contact(
 @router.get("/contacts/", response_model=list[contacts.ContactRead])
 async def read_contacts(
     skip: int = 0,
-    limit: int = 10,
+    limit: int = 1000,
     tag: str = None,
     db: AsyncSession = Depends(database.get_db),
     get_current_user: user.newuser = Depends(get_current_user)
