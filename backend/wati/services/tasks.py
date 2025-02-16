@@ -556,7 +556,10 @@ async def schedule_woo_task(integration_id: int):
                 "Host": hostname
             }
 
-            params = {}
+            params = {
+                    'product': integration.product_id,
+                    'status': integration.status
+                }
 
             # Use httpx for async HTTP request to fetch WooCommerce orders
             async with httpx.AsyncClient() as client:
