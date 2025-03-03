@@ -88,6 +88,7 @@ async def process_responses(
     # Save waba_id and phone_id to the database for the current user
 
     current_user.WABAID=int(waba_id)
+    current_user.Phone_id=int(phone_id)
     current_user.PAccessToken=token_data.get("access_token")
     db.add(current_user)
     await db.commit()
