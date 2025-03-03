@@ -40,7 +40,7 @@ async def process_responses(
 
     # Extract necessary data
     waba_id = session_info.get("data", {}).get("waba_id")
-    # phone_id = session_info.get("data", {}).get("phone_id")
+    phone_id = session_info.get("data", {}).get("phone_number_id")
     code = sdk_info.get("authResponse", {}).get("code")
 
     if not waba_id or not code:
