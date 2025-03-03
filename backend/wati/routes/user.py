@@ -105,21 +105,21 @@ async def process_responses(
     response = requests.post(url, headers=headers)
     response.raise_for_status()
 
-    # # Register the customer's phone_no id
-    # pin="123456"
+    # Register the customer's phone_no id
+    pin="123456"
 
-    # url = f"https://graph.facebook.com/v21.0/{phone_id}/register"
-    # headers = {
-    #     "Authorization": f"Bearer {Paccess_token}",
-    #     "Content-Type": "application/json",
-    # }
-    # data = {
-    #     "messaging_product": "whatsapp",
-    #     "pin": pin,
-    # }
-    # response = requests.post(url, headers=headers, json=data)
-    # response.raise_for_status()
-    # return response.json()
+    url = f"https://graph.facebook.com/v21.0/{phone_id}/register"
+    headers = {
+        "Authorization": f"Bearer {Paccess_token}",
+        "Content-Type": "application/json",
+    }
+    data = {
+         "messaging_product": "whatsapp",
+         "pin": pin,
+     }
+    response = requests.post(url, headers=headers, json=data)
+    response.raise_for_status()
+    return response.json()
 
 
     # Return the business access token to the frontend
