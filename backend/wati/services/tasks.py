@@ -482,27 +482,45 @@ def calculate_next_execution_time(repeat_days, time_str):
 
     return next_execution
 
-def process_phone_number(phone, country_code):
-        # Remove spaces, +, - and leading zeros
-        phone = ''.join(c for c in phone if c.isdigit())
-        phone = phone.lstrip('0')  # Remove leading zeros
+# def process_phone_number(phone, country_code):
+#         # Remove spaces, +, - and leading zeros
+#         phone = ''.join(c for c in phone if c.isdigit())
+#         phone = phone.lstrip('0')  # Remove leading zeros
         
-        try:
-            # Try parsing the phone number with the provided country code
-            parsed_number = phonenumbers.parse(phone, country_code)
+#         try:
+#             # Try parsing the phone number with the provided country code
+#             parsed_number = phonenumbers.parse(phone, country_code)
             
-            # If the parsed number is valid and has the country code, return it in E164 format
-            if phonenumbers.is_valid_number(parsed_number):
-                # Get the phone number in international format without the '+' sign
-                formatted_number = phonenumbers.format_number(parsed_number, phonenumbers.PhoneNumberFormat.E164)
-                # Remove the '+' sign from the formatted number
-                return formatted_number.replace('+', '')
-            else:
-                raise ValueError("Invalid number")
+#             # If the parsed number is valid and has the country code, return it in E164 format
+#             if phonenumbers.is_valid_number(parsed_number):
+#                 # Get the phone number in international format without the '+' sign
+#                 formatted_number = phonenumbers.format_number(parsed_number, phonenumbers.PhoneNumberFormat.E164)
+#                 # Remove the '+' sign from the formatted number
+#                 return formatted_number.replace('+', '')
+#             else:
+#                 raise ValueError("Invalid number")
         
-        except phonenumbers.phonenumberutil.NumberParseException:
-            # If the number is invalid or cannot be parsed, return None
-            return None
+#         except phonenumbers.phonenumberutil.NumberParseException:
+#             # If the number is invalid or cannot be parsed, return None
+#             return None
+
+def process_phone_number(phone: str, country_code: str = "IN") -> str | None:
+    try:
+        # Use 'IN' as the default country code if none is provided
+        country_code = country_code.strip().upper() or "IN"
+
+        # Parse the phone number with the given (or default) country code
+        parsed_number = phonenumbers.parse(phone, country_code)
+
+        # Check if the number is valid
+        if phonenumbers.is_valid_number(parsed_number):
+            # Format in E.164 and remove the '+' sign
+            return phonenumbers.format_number(parsed_number, phonenumbers.PhoneNumberFormat.E164).replace("+", "")
+
+    except phonenumbers.phonenumberutil.NumberParseException:
+        pass  # Return None if parsing fails
+
+    return phone  # Return None for invalid numbers
         
 
 
