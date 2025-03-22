@@ -1,14 +1,18 @@
 
-# from sqlalchemy import create_engine
-# from sqlalchemy.ext.declarative import declarative_base
-# from sqlalchemy.orm import sessionmaker,Session
-# from fastapi import Depends
+import os
+from dotenv import load_dotenv
+
+# Load the .env file
+load_dotenv()
+
+# Fetch values
+backend_url = os.getenv("BACKEND_URL")
+database_url = os.getenv("DATABASE_URL")
+
+# SQLALCHEMY_DATABASE_URL = 'postgresql+asyncpg://postgres:Denmarks123$@localhost/wati_clone'
 
 
-
-SQLALCHEMY_DATABASE_URL = 'postgresql+asyncpg://postgres:Naveen1971$@my-db-instance.cj4628i6epn6.eu-north-1.rds.amazonaws.com/wotnot'
-
-
+SQLALCHEMY_DATABASE_URL = database_url
 
 # SQLALCHEMY_DATABASE_URL = 'postgresql://postgres:Denmarks123$@localhost/wati_clone'
 # engine = create_engine(SQLALCHEMY_DATABASE_URL)

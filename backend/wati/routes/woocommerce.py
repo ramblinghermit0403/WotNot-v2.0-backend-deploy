@@ -65,6 +65,8 @@ async def send_order_confirmation_message(order_data, whatsapp_token, phone_id, 
 
     template_name = integration.template
     parameters = integration.parameters
+    template_data= json.loads(integration.template_data)
+    TemplateLanguage = template_data.get("language")
 
     customer_phone = order_data["billing"]["phone"]
     customer_name = order_data["billing"]["first_name"]
@@ -117,7 +119,7 @@ async def send_order_confirmation_message(order_data, whatsapp_token, phone_id, 
         "template": {
             "name": template_name,  # Use the template name from the database
             "language": {
-                "code": "en_US"
+                "code": TemplateLanguage
             },
             "components": components
         }
@@ -214,6 +216,7 @@ async def saveWooIntegartion(request:integration.wooIntegration,get_current_user
         api_key=get_current_user.api_key,
         app="woocommerce",
         
+        
     )
     # Add and commit the data to the database
     db.add(integration)
@@ -228,8 +231,10 @@ async def saveWooIntegartion(request:integration.wooIntegration,get_current_user
         api_key=get_current_user.api_key,
         type=request.type,
         template=request.template_id,
+        template_data=request.template_data,
         user_id=get_current_user.id,
-        product_id=request.product_id
+        product_id=request.product_id,
+        description=request.description
 
     )
 
@@ -249,6 +254,8 @@ async def saveWooIntegartion(request:integration.wooIntegration,get_current_user
 from datetime import datetime, timedelta
 import pytz
 
+
+
 def calculate_next_execution_time(repeat_days, time_str):
     """
     Calculate the next execution time based on repeat_days and time in IST.
@@ -260,39 +267,41 @@ def calculate_next_execution_time(repeat_days, time_str):
     # Map days of the week to integers
     days_mapping = {"Monday": 0, "Tuesday": 1, "Wednesday": 2, "Thursday": 3,
                     "Friday": 4, "Saturday": 5, "Sunday": 6}
-    repeat_days = [days_mapping[day] for day in repeat_days]
 
-    # Current time in UTC
-    now = datetime.now(utc)
-    current_day = now.weekday()
-    current_time = now.time()
-    current_date = datetime.now().strftime("%Y-%m-%d")
+    # Ensure repeat_days is not empty
+    if not repeat_days:
+        raise ValueError("repeat_days cannot be empty")
 
-    # Convert target time string (in IST) to UTC
-    target_time_ist = datetime.strptime(time_str, "%H:%M")
-    target_time_ist = datetime.strptime(f"{current_date} {time_str}", "%Y-%m-%d %H:%M")
-    target_time_utc = target_time_ist.astimezone(utc).time()
-    print(target_time_utc)
+    repeat_days = sorted([days_mapping[day] for day in repeat_days])  # Sort for easier lookup
 
-    # Find the next valid day and time
-    days_until_next = None
-    for day in repeat_days:
-        day_difference = (day - current_day) % 7
-        if day == current_day and target_time_utc >= current_time:
-            days_until_next = day_difference
-            break
-        elif days_until_next is None or day_difference < days_until_next:
-            days_until_next = day_difference
+    # Current time in IST
+    now_ist = datetime.now(ist)
+    current_day = now_ist.weekday()
+    current_time = now_ist.time()
 
-    # Calculate the next execution datetime
-    next_date = now + timedelta(days=days_until_next)
-    next_execution = datetime.combine(next_date.date(), target_time_utc, tzinfo=utc)
+    # Convert target time string to a datetime object in IST
+    today_date = now_ist.strftime("%Y-%m-%d")
+    target_time_ist = datetime.strptime(f"{today_date} {time_str}", "%Y-%m-%d %H:%M")
+    target_time_ist = ist.localize(target_time_ist)
+    target_time_utc = target_time_ist.astimezone(utc).time()  # Convert to UTC time format
+
+    # If today is a repeat day AND the current time is before the target time → Execute today
+    if current_day in repeat_days and current_time < target_time_ist.time():
+        next_execution_date = now_ist
+    else:
+        # Find the next available repeat day
+        days_until_next = min(
+            [(day - current_day) % 7 for day in repeat_days if (day - current_day) % 7 > 0],
+            default=7  # Default to next week's first repeat day if all have passed
+        )
+
+        # Compute next execution date
+        next_execution_date = now_ist + timedelta(days=days_until_next)
+
+    # Combine date and UTC time in required format
+    next_execution = datetime.combine(next_execution_date.date(), target_time_utc, tzinfo=utc)
 
     return next_execution
-
-
-
-
 
 
 @router.post("/integrate/woo_pwn")

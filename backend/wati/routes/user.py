@@ -40,7 +40,7 @@ async def process_responses(
 
     # Extract necessary data
     waba_id = session_info.get("data", {}).get("waba_id")
-    phone_id = session_info.get("data", {}).get("phone_number_id")
+    # phone_id = session_info.get("data", {}).get("phone_id")
     code = sdk_info.get("authResponse", {}).get("code")
 
     if not waba_id or not code:
@@ -197,7 +197,7 @@ def update_profile(
         "about": request.about,
         "email": str(request.email),
         "websites": [str(url) for url in request.websites],
-        "profile_picture_url": request.profile_picture_url or None,
+        "profile_picture_handle": request.profile_picture_handle or None,
     }
 
     headers = {
@@ -263,23 +263,39 @@ async def resumable_upload(file: UploadFile,get_current_user: user.newuser = Dep
 
     upload_session_data = create_session_response.json()
     upload_id = upload_session_data["id"]
+    print(upload_id)
 
     # Step 2: Upload File Chunk
-    upload_url = f"{BASE_URL}/{upload_id}"
+    upload_url = f"{BASE_URL}/{upload_id}&access_token={ACCESS_TOKEN}"
     upload_headers = {
-        "Authorization": f"OAuth {ACCESS_TOKEN}",
+        'Content-Type': 'image/jpeg',
         'Accept': '*/*',
         'file_offset': str(0)
     }
     
+    payload = file_content
 
-    upload_response = requests.put(upload_url, headers=upload_headers, data=file_content)
+    upload_response = requests.post(upload_url, headers=upload_headers, data=payload)
+    if upload_response.status_code != 200:
+        raise HTTPException(status_code=upload_response.status_code, detail=upload_response.json())
+    
+
+    url = f"https://graph.facebook.com/v20.0/{upload_id}&access_token={ACCESS_TOKEN}"
+
+    payload = file_content
+    headers = {
+    'Content-Type': 'image/jpeg',
+    'file_offset': '0'
+    }
+
+    upload_response = requests.request("POST", url, headers=headers, data=payload)
+
     if upload_response.status_code != 200:
         raise HTTPException(status_code=upload_response.status_code, detail=upload_response.json())
 
 
     # Step 3: Query Upload Status
-    query_url = f"{BASE_URL}/{upload_id}"
+    query_url = f"{BASE_URL}/{upload_id}&access_token={ACCESS_TOKEN}"
     query_response = requests.get(query_url, headers=headers)
     if query_response.status_code != 200:
         raise HTTPException(status_code=query_response.status_code, detail=query_response.json())

@@ -54,7 +54,8 @@ class BroadcastListUpdate(BaseModel):
 #     sent:bool
 
     
-
+class ExampleModel(BaseModel):
+    header_handle: List[str]
 
 class Button(BaseModel):
     type: str = Field(..., description="The type of the button, e.g., 'URL' or 'QUICK_REPLY'")
@@ -64,6 +65,7 @@ class Component(BaseModel):
     type: str
     format: Optional[str] = None  # Allowed only for certain component types
     text: Optional[str] = None
+    example: ExampleModel = None
     buttons: Optional[List[Button]] = None  # Optional list of Button objects
     @classmethod
     def validate_component(cls, component: dict):

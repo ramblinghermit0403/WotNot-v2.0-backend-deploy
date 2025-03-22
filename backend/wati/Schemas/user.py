@@ -39,5 +39,5 @@ class BusinessProfile(BaseModel):
     about: str
     email: str
     websites: List[str]
-    profile_picture_url: Optional[str]
+    profile_picture_handle: Optional[str]
 

@@ -76,30 +76,36 @@ from ..crud.template import send_template_to_whatsapp
 
 
 
-router=APIRouter( tags=['Broadcast'])
+# Initialize the FastAPI router for broadcast-related routes
+router = APIRouter(tags=['Broadcast'])
+
+# Initialize the FastAPI application
 app = FastAPI()
 
+# Define a constant for the webhook verification token
 WEBHOOK_VERIFY_TOKEN = "12345"  # Replace with your verification token
 
 # Meta Webhook verification endpoint
 @router.get("/meta-webhook")
 async def verify_webhook(request: Request):
+    """
+    Endpoint to verify the webhook from WhatsApp.
+    """
     verify_token = request.query_params.get("hub.verify_token")
     challenge = request.query_params.get("hub.challenge")
     hubmode = request.query_params.get("hub.mode")
     print(f"Received verify_token: {challenge}, Expected: {WEBHOOK_VERIFY_TOKEN}")
-    if verify_token == WEBHOOK_VERIFY_TOKEN and hubmode == "subscribe" :
-        return PlainTextResponse(content=request.query_params.get("hub.challenge"),status_code=200)
-    
+    if verify_token == WEBHOOK_VERIFY_TOKEN and hubmode == "subscribe":
+        return PlainTextResponse(content=request.query_params.get("hub.challenge"), status_code=200)
     else:
         raise HTTPException(status_code=403, detail="Verification token mismatch")
 
-# ######### WORKING ENDPOINT WITH BROADCAST REPORT ##########
-
 # POST endpoint to handle webhook data from WhatsApp
-
 @router.post("/meta-webhook")
 async def receive_meta_webhook(request: Request, db: AsyncSession = Depends(database.get_db)):
+    """
+    Endpoint to receive and process webhook data from WhatsApp.
+    """
     try:
         # Parse the incoming webhook request
         body = await request.json()
@@ -619,7 +625,8 @@ async def send_template_messages_task(
                 recipient_name = contact.name
                 recipient_phone = contact.phone
 
-
+                template_data = json.loads(template_data)
+                Templatelanguage = template_data.get("language")
 
                 data = {
                     "messaging_product": "whatsapp",
@@ -627,9 +634,10 @@ async def send_template_messages_task(
                     "type": "template",
                     "template": {
                         "name": template,
-                        "language": {"code": "en_US"},
+                        "language": {"code": Templatelanguage},
                     }
                 }
+
 
                 if image_id:
                     data["template"]["components"] = [
@@ -961,30 +969,88 @@ async def delete_scheduled_broadcast(
     return {"detail": "Scheduled broadcast has been canceled."}
 
 
+# @router.post("/create-template", response_model=broadcast.TemplateResponse)
+# async def create_template(
+#     template: broadcast.TemplateCreate,
+#     request: Request,
+#     get_current_user: user.newuser = Depends(get_current_user)
+# ):
+#     try:
+#         template_data = await request.json()  # Await JSON data from the request
+#         broadcast.TemplateCreate.validate_template(template_data)  # Ensure the template is validated synchronously
+        
+#         # Send the template to WhatsApp API
+
+#         url = f"https://graph.facebook.com/v21.0/{get_current_user.WABAID}/message_templates"
+#         headers = {
+#             "Authorization": f"Bearer {get_current_user.PAccessToken}",
+#             "Content-Type": "application/json"
+#         }
+#         payload = {
+#             "allow_category_change": True,
+#             "category": template.get('category'),
+#             "components": [comp for comp in template.get('components', [])],
+#             "language": template.get('language'),
+#             "name": template.get('name'),
+#             "sub_category": template.get('sub_category')
+#         }
+
+#         async with httpx.AsyncClient() as client:
+#             response = await client.post(url, headers=headers, json=payload)
+
+#         if response.status_code != 200:
+#             raise HTTPException(status_code=response.status_code, detail=response.json())
+
+#         return response
+    
+#     except HTTPException as e:
+#         logging.critical(f"HTTP Exception: {e.detail}")
+#         raise HTTPException(status_code=e.status_code, detail=e.detail)
+#     except Exception as e:
+#         logging.critical(f"Unexpected Exception: {str(e)}")
+#         raise HTTPException(status_code=500, detail="An unexpected error occurred.")
+
+import logging
+from fastapi import APIRouter, HTTPException, Request, Depends
+import httpx
+  # Adjust import path as per your project
+
+
 @router.post("/create-template", response_model=broadcast.TemplateResponse)
 async def create_template(
-    template: broadcast.TemplateCreate,
-    request: Request,
+    request: broadcast.TemplateCreate,
+    
     get_current_user: user.newuser = Depends(get_current_user)
 ):
     try:
-        template_data = await request.json()  # Await JSON data from the request
-        broadcast.TemplateCreate.validate_template(template_data)  # Ensure the template is validated synchronously
-        
-        # Send the template asynchronously to WhatsApp
-        response = await send_template_to_whatsapp(
-            template_data,
-            get_current_user.PAccessToken,
-            get_current_user.WABAID
-        )
-        
-        return response
+        template_data = request.model_dump()  # Convert Pydantic model to dictionary
+        broadcast.TemplateCreate.validate_template(template_data)  # Validate template
+
+        # WhatsApp API URL and headers
+        url = f"https://graph.facebook.com/v21.0/{get_current_user.WABAID}/message_templates"
+        headers = {
+            "Authorization": f"Bearer {get_current_user.PAccessToken}",
+            "Content-Type": "application/json"
+        }
+
+        # Payload construction
+        payload = template_data
+        print(payload)
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, headers=headers, json=payload)
+            response_data = response.json()  # Ensure JSON parsing
+
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail=response_data)
+
+        return response_data  # Return parsed JSON instead of raw response
+
     except HTTPException as e:
         logging.critical(f"HTTP Exception: {e.detail}")
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
-    except Exception as e:
-        logging.critical(f"Unexpected Exception: {str(e)}")
-        raise HTTPException(status_code=500, detail="An unexpected error occurred.")
+        raise e  # No need to wrap again
+
+
 
 
 @router.delete("/delete-template/{template_name}")
