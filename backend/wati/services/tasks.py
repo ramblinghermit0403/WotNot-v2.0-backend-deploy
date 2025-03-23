@@ -214,9 +214,10 @@ async def send_broadcast(
             for contact in recipients:
                 recipient_name = contact["name"]
                 recipient_phone = contact["phone"]
+
                 if isinstance(template_data, str):
-                    template_data = json.loads(template_data)
-                Templatelanguage = template_data.get("language")
+                    template_data_json = json.loads(template_data)
+                Templatelanguage = template_data_json.get("language")
 
                 data = {
                     "messaging_product": "whatsapp",
@@ -270,6 +271,7 @@ async def send_broadcast(
                     db.add(MessageIdLog)
                     await db.commit()
                     await db.refresh(MessageIdLog)
+
 
                     # Save the sent message data in conversations table
                     conversation = Conversation(
@@ -368,9 +370,9 @@ async def send_template_messages_task(
                 recipient_phone = contact["phone"]
 
                 if isinstance(template_data, str):
-                    template_data = json.loads(template_data)
+                    template_data_json = json.loads(template_data)
 
-                TemplateLanguage = template_data.get("language")
+                Templatelanguage = template_data_json.get("language")
 
 
                 data = {
@@ -379,7 +381,7 @@ async def send_template_messages_task(
                     "type": "template",
                     "template": {
                         "name": template,
-                        "language": {"code": TemplateLanguage},
+                        "language": {"code": Templatelanguage},
                     }
                 }
 
@@ -402,11 +404,13 @@ async def send_template_messages_task(
                     body_params = [{"type": "text", "text": f"{recipient_name}"}] if body_parameters == "Name" else []
                     if "components" not in data["template"]:
                         data["template"]["components"] = []
+
                     data["template"]["components"].append({
                         "type": "body",
                         "parameters": body_params
                     })
 
+                print(data)
                 response = await client.post(API_url, headers=headers, json=data)
                 response_data = response.json()
 
@@ -427,6 +431,8 @@ async def send_template_messages_task(
                     db.add(message_log)
                     await db.commit()
                     await db.refresh(message_log)
+
+                    
 
                     # Save the sent message data in conversations table
                     conversation = Conversation(
@@ -761,7 +767,7 @@ async def schedule_woo_task(integration_id: int):
                             print(f"user not found")
 
 
-                        image_id = ""
+                        image_id = integration.image_id
                         recipients = df_reduced.to_json(orient='records')
                         recipients_list = json.loads(recipients) # Convert JSON string to Python list
                         API_url = f"https://graph.facebook.com/v20.0/{user.Phone_id}/messages"
@@ -824,20 +830,22 @@ async def schedule_woo_task(integration_id: int):
                                         else:
                                             value = ""  # Default for unknown parameters
 
+
+                                        body_params = [{"type": "text", "text": f"{value}"}] 
                                         # Ensure the components list exists
                                         if "components" not in data["template"]:
-                                            data["template"]["components"] = [{"type": "body", "parameters": []}]
-
-                                        # Ensure the first component's parameters list exists
-                                        if "parameters" not in data["template"]["components"][0]:
-                                            data["template"]["components"][0]["parameters"] = []
-
-                                        # Append the new parameter
-                                        data["template"]["components"][0]["parameters"].append({"type": "text", "text": value})
+                                            data["template"]["components"] = []
+                                            
+                                        data["template"]["components"].append({
+                                                "type": "body",
+                                                "parameters": body_params
+                                            })
 
 
 
                                 # Send the message
+
+                                print(data)
                                 response = await client.post(API_url, headers=fb_headers, json=data)
                                 response_data = response.json()
 

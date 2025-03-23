@@ -52,5 +52,6 @@ class WooIntegration(database.Base):
     product_id=Column(Integer,nullable=True)
     status=Column(String,nullable=True)
     base_url=Column(String,nullable=True)
+    image_id=Column(String,nullable=True)
 
 

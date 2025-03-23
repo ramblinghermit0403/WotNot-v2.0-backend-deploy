@@ -22,3 +22,4 @@ class wooIntegration(BaseModel):
     status:Optional[str]= None
     base_url:Optional[str]= None
     description:Optional[str]=None
+    image_id:Optional[str]=None

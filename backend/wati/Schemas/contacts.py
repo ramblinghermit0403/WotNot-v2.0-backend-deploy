@@ -1,10 +1,11 @@
-from pydantic import BaseModel 
+from pydantic import BaseModel
 from datetime import datetime
+from typing import Optional
 
 # Pydantic model
 class ContactCreate(BaseModel):
     name: str
-    email: str
+    email: Optional[str]
     phone: str
     tags: list[str] = []
 

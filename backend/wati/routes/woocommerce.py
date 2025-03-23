@@ -67,6 +67,7 @@ async def send_order_confirmation_message(order_data, whatsapp_token, phone_id, 
     parameters = integration.parameters
     template_data= json.loads(integration.template_data)
     TemplateLanguage = template_data.get("language")
+    image_id=integration
 
     customer_phone = order_data["billing"]["phone"]
     customer_name = order_data["billing"]["first_name"]
@@ -95,35 +96,56 @@ async def send_order_confirmation_message(order_data, whatsapp_token, phone_id, 
         }
     ]
     
-    for param in parameters:
-         
-        param_key = param["key"]
-        # Use the parameter key to fetch the corresponding value from order_data
-        if param_key == "billing.first_name":
-            value = customer_name
-        elif param_key == "id":
-            value = order_id
-        elif param_key == "total":
-            value = order_total
-        else:
-            value = ""  # Handle unknown parameters
 
-        
-        components[0]["parameters"].append({"type": "text", "text": value})
-        
-    # Define the message template data
-    message_data = {
+
+    data = {
         "messaging_product": "whatsapp",
         "to": customer_phone,
         "type": "template",
         "template": {
-            "name": template_name,  # Use the template name from the database
-            "language": {
-                "code": TemplateLanguage
-            },
-            "components": components
+            "name": template_name,
+            "language": {"code": TemplateLanguage},
         }
     }
+
+    if integration.image_id:
+        data["template"]["components"] = [
+            {
+                "type": "header",
+                "parameters": [
+                    {
+                        "type": "image",
+                        "image": {"id": integration.image_id}
+                    }
+                ]
+            }
+        ]
+
+    if integration.parameters:
+        for param in parameters:
+            param_key = param["key"]
+            
+            # Map parameter keys to specific values
+            if param_key == "billing.first_name":
+                value = customer_name
+            # elif param_key == "id":
+            #     value = order_id
+            # elif param_key == "total":
+            #     value = order_total
+            else:
+                value = ""  # Default for unknown parameters
+
+
+            body_params = [{"type": "text", "text": f"{value}"}] 
+            # Ensure the components list exists
+            if "components" not in data["template"]:
+                data["template"]["components"] = []
+                
+            data["template"]["components"].append({
+                    "type": "body",
+                    "parameters": body_params
+                })
+        
 
  
     # WhatsApp API endpoint and headers
@@ -135,7 +157,7 @@ async def send_order_confirmation_message(order_data, whatsapp_token, phone_id, 
     
     # Send message to WhatsApp API
     async with httpx.AsyncClient() as client:
-        response = await client.post(API_URL, headers=API_HEADERS, json=message_data)
+        response = await client.post(API_URL, headers=API_HEADERS, json=data)
 
     if response.status_code == 200:
         print(f"Message sent successfully to {customer_phone}")
@@ -204,10 +226,12 @@ async def apikey(request:Request,get_current_user: user.newuser=Depends(get_curr
 async def saveWooIntegartion(request:integration.wooIntegration,get_current_user: user.newuser=Depends(get_current_user),db: AsyncSession = Depends(database.get_db)):
     parameters_list = [{"key": param.key} for param in request.parameters]
     
-    # result=await db.execute(select(Integration.WooIntegration).filter((Integration.WooIntegration.user_id==get_current_user.id)&(Integration.WooIntegration.type=="woo/order_confirmation")))
-    # exixsting=result.scalars().first()
-    # if exixsting:
-    #     raise HTTPException(status_code=400, detail="Integration already exists")
+    result=await db.execute(select(Integration.WooIntegration).filter((Integration.WooIntegration.user_id==get_current_user.id)
+                            &(Integration.WooIntegration.type=="woo/order_confirmation")
+                            &(Integration.WooIntegration.product_id==request.product_id)))
+    exixsting=result.scalars().first()
+    if exixsting:
+        raise HTTPException(status_code=400, detail="Integration for the product already exists")
    
    # Create the WooIntegrationDB model instance
     integration=Integration.Integration(
@@ -234,7 +258,8 @@ async def saveWooIntegartion(request:integration.wooIntegration,get_current_user
         template_data=request.template_data,
         user_id=get_current_user.id,
         product_id=request.product_id,
-        description=request.description
+        description=request.description,
+        image_id=request.image_id
 
     )
 
@@ -352,7 +377,8 @@ async def saveWooIntegartion(request:integration.wooIntegration,get_current_user
         product_id=request.product_id,
         status=request.status,
         base_url=integration_credentials.base_url,
-        description=request.description
+        description=request.description,
+        image_id=request.image_id
     )
 
     # Add and commit the data to the database
